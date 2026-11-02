@@ -13,13 +13,19 @@ const ALLOWED_TYPES = new Set([
 
 const MAX_LENGTH = 1000;
 
+// 禁用缓存的响应头
+const NO_CACHE_HEADERS = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  "Pragma": "no-cache",
+};
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     
     // 解析参数
     const typeParam = searchParams.get("type")?.trim();
-const typeList = typeParam ? typeParam.split(",").filter(Boolean) : null;
+    const typeList = typeParam ? typeParam.split(",").filter(Boolean) : null;
     const minLength = searchParams.get("minLength") ? Number(searchParams.get("minLength")) : null;
     const maxLength = searchParams.get("maxLength") ? Number(searchParams.get("maxLength")) : null;
     const format = searchParams.get("format");
@@ -55,7 +61,7 @@ const typeList = typeParam ? typeParam.split(",").filter(Boolean) : null;
 
     // 构建请求 URL
     const apiUrl = new URL(HITOKOTO_API);
-    if (typeList) {
+    if (typeList && typeList.length > 0) {
       if (!typeList.every((type) => ALLOWED_TYPES.has(type))) {
         return NextResponse.json(
           responseMessage(
@@ -69,12 +75,12 @@ const typeList = typeParam ? typeParam.split(",").filter(Boolean) : null;
       apiUrl.searchParams.set("c", typeList[Math.floor(Math.random() * typeList.length)]);
     }
 
-    // 调用外部 API
+    // 调用外部 API - 禁用缓存
     const response = await fetch(apiUrl.toString(), {
       headers: {
         "Accept": "application/json",
       },
-      next: { revalidate: 60 }, // 缓存 60 秒
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -83,12 +89,11 @@ const typeList = typeParam ? typeParam.split(",").filter(Boolean) : null;
 
     const rawData = await response.json();
 
-    // 长度过滤（如果 API 不支持）
+    // 长度过滤
     if (
       (minLength !== null && rawData.length < minLength) ||
       (maxLength !== null && rawData.length > maxLength)
     ) {
-      // 不符合条件，返回暂无数据
       return NextResponse.json(
         responseMessage(null, "暂无符合条件的数据", RESPONSE.ERROR),
       );
@@ -111,11 +116,14 @@ const typeList = typeParam ? typeParam.split(",").filter(Boolean) : null;
       return new NextResponse(data.content, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
+          ...NO_CACHE_HEADERS,
         },
       });
     }
 
-    return NextResponse.json(responseMessage(data));
+    return NextResponse.json(responseMessage(data), {
+      headers: NO_CACHE_HEADERS,
+    });
   } catch (err) {
     return NextResponse.json(catchError(err));
   }
