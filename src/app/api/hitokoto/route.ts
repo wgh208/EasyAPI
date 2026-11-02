@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     
     // 解析参数
-    const typeList = searchParams.get("type")?.split(",") || null;
+    const typeParam = searchParams.get("type")?.trim();
+const typeList = typeParam ? typeParam.split(",").filter(Boolean) : null;
     const minLength = searchParams.get("minLength") ? Number(searchParams.get("minLength")) : null;
     const maxLength = searchParams.get("maxLength") ? Number(searchParams.get("maxLength")) : null;
     const format = searchParams.get("format");
