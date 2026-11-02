@@ -3,7 +3,7 @@
  * @Date: 2026-03-06 17:33:50
  * @LastEditors: 白雾茫茫丶<baiwumm.com>
  * @LastEditTime: 2026-03-13 17:56:26
- * @Description:
+ * @Description: 随机头像
  */
 // 直接导入独立子包，绕开 @dicebear/collection 的巨型 barrel（会解析全部 30+ 风格）；
 // namespace 导入与 collection 内部一致，提供 create/meta/schema，满足 Style 类型
@@ -31,6 +31,10 @@ import {
   setCachedAvatarSvg,
 } from "@/lib/server/avatar-cache";
 import { catchError, parseBoundedInt, responseMessage } from "@/lib/utils";
+
+// 禁用 Vercel 默认缓存，确保每次请求都动态执行
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 /**
  * style -> dicebear style
@@ -103,6 +107,11 @@ export async function GET(request: NextRequest) {
             ? list.map((item) => item.data)
             : list.map((item) => item.url)) as string[],
         ),
+        {
+          headers: {
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+          },
+        },
       );
     }
 
@@ -114,10 +123,18 @@ export async function GET(request: NextRequest) {
 
     const svg = renderAvatarSvg(styleValue, seed, size);
 
+    // 智能缓存策略：
+    // - 有 seed 参数：保留长缓存（相同 seed 应该返回相同结果）
+    // - 无 seed 参数：禁用缓存（每次都应该返回不同结果）
+    const hasSeed = !!seedParam;
+    const cacheControl = hasSeed
+      ? "public, max-age=31536000" // 有 seed，缓存 1 年
+      : "no-store, no-cache, must-revalidate, proxy-revalidate"; // 无 seed，禁用缓存
+
     return new NextResponse(svg, {
       headers: {
         "Content-Type": "image/svg+xml",
-        "Cache-Control": "public, max-age=31536000",
+        "Cache-Control": cacheControl,
       },
     });
   } catch (err) {
