@@ -1,45 +1,50 @@
-import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { dbErrorResponse } from "@/lib/server/api-helpers";
+import { catchError, responseMessage } from "@/lib/utils";
+import { RESPONSE } from "@/enums";
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// 禁用 Vercel 缓存
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const searchParams = request.nextUrl.searchParams;
+    const format = searchParams.get("format");
+
+    const supabase = await getSupabaseServerClient();
     
-    // 使用数据库随机函数
-    const { data, error } = await supabase.rpc('get_random_diary_poetry')
-    
+    // 从数据库随机取一条
+    const { data, error } = await supabase.rpc("get_random_diary_poetry");
+
     if (error) {
-      console.error('Database error:', error)
-      return NextResponse.json(
-        { error: '获取诗词失败' },
-        { status: 500 }
-      )
+      return dbErrorResponse(error, "get_random_diary_poetry");
     }
-    
-    if (!data || data.length === 0) {
+
+    if (!data) {
       return NextResponse.json(
-        { error: '暂无诗词数据' },
-        { status: 404 }
-      )
+        responseMessage(null, "暂无数据", RESPONSE.ERROR),
+      );
     }
-    
-    // 返回随机结果，禁用所有缓存
-    return NextResponse.json(data[0], {
+
+    // 返回 text 格式
+    if (format === "text") {
+      return new NextResponse(data.content, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      });
+    }
+
+    return NextResponse.json(responseMessage(data), {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'Surrogate-Control': 'no-store',
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
       },
-    })
-  } catch (error) {
-    console.error('API error:', error)
-    return NextResponse.json(
-      { error: '服务器错误' },
-      { status: 500 }
-    )
+    });
+  } catch (err) {
+    return NextResponse.json(catchError(err));
   }
 }
